@@ -1,0 +1,94 @@
+import express from "express";
+import bodyParser from "body-parser";
+import corsFilter from "cors";
+import cuid from "cuid";
+import logger from "./utils/logging";
+import _ from "./utils/env";
+import makeResponse from "./utils/response";
+import rateLimit from "express-rate-limit";
+import { NotFoundError, ERROR_TYPES as errors } from "./utils/errors";
+
+const app = express();
+
+app.disable("etag");
+
+app.use(bodyParser.json({ limit: "1024mb" }));
+app.use(bodyParser.urlencoded({ extended: true, limit: "1024mb" }));
+app.use(corsFilter());
+app.options("*", corsFilter());
+
+app.use((req, _, next) => {
+  req.requestId = cuid();
+  logger.info(
+    "request id:" + req.requestId + "request route: " + req.originalUrl
+  );
+  logger.info("request id:" + req.requestId + "request route: " + req.method);
+  next();
+});
+
+app.get("/health", async (req, res) => {
+  return makeResponse(res, 200, "HEALTHY!");
+});
+
+app.use((req, res, next) => {
+  if (res.response) {
+    res.send(res.response);
+    logger.info(
+      "request id: " +
+        req.requestId +
+        " response status: " +
+        JSON.stringify(res.statusCode)
+    );
+    logger.info(
+      "request id: " +
+        req.requestId +
+        " response body: " +
+        JSON.stringify(res.response)
+    );
+  } else {
+    next();
+  }
+});
+
+app.use("*", (_, res, next) => {
+  // any url that didn't match our routes will get to this middleware.
+  if (res.statusCode === 200) {
+    res.statusCode = 404;
+  }
+  next(new NotFoundError(errors.NOT_FOUND));
+});
+
+// error handlers
+app.use((err, req, res, _) => {
+  logger.error(
+    "request id: " +
+      req.requestId +
+      " response headers: " +
+      JSON.stringify(res.headers)
+  );
+
+  if (err?.statusCode) {
+    res.statusCode = err?.statusCode;
+  }
+
+  if (res.statusCode === 404 || res.statusCode === 200) {
+    res.statusCode = 404;
+    logger.error("request id: " + req.requestId + " response status: 404");
+    logger.error("request id: " + req.requestId + " response body: " + err);
+    res.send({
+      status: res.statusCode,
+      message: err.message,
+    });
+  } else {
+    res.statusCode = res.statusCode || 500;
+    logger.error(
+      "request id: " + req.requestId + " response status: " + res.statusCode
+    );
+    logger.error("request id: " + req.requestId + " response body: " + err);
+    res.send({
+      status: res.statusCode,
+      message: err.message,
+    });
+  }
+});
+export default app;
