@@ -7,7 +7,9 @@ import _ from "./utils/env";
 import makeResponse from "./utils/response";
 import rateLimit from "express-rate-limit";
 import { NotFoundError, ERROR_TYPES as errors } from "./utils/errors";
+import db, { mongoose } from "./db/mongolize";
 
+db();
 const app = express();
 
 app.disable("etag");
@@ -26,8 +28,21 @@ app.use((req, _, next) => {
   next();
 });
 
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 500, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false,
+});
+// Apply the rate limiting middleware to all requests
+app.use(limiter);
+
 app.get("/health", async (req, res) => {
-  return makeResponse(res, 200, "HEALTHY!");
+  if (mongoose.connection.readyState === 1) {
+    return makeResponse(res, 200, "HEALTHY!");
+  } else {
+    return makeResponse(res, 599, "DB Connection Error");
+  }
 });
 
 app.use((req, res, next) => {
