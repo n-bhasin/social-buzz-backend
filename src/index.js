@@ -8,6 +8,7 @@ import makeResponse from "./utils/response";
 import rateLimit from "express-rate-limit";
 import { NotFoundError, ERROR_TYPES as errors } from "./utils/errors";
 import db, { mongoose } from "./db/mongolize";
+import UserRouter from "./routes/user";
 
 db();
 const app = express();
@@ -44,6 +45,9 @@ app.get("/health", async (req, res) => {
     return makeResponse(res, 599, "DB Connection Error");
   }
 });
+
+//all routes
+app.use("/api/user", UserRouter);
 
 app.use((req, res, next) => {
   if (res.response) {
